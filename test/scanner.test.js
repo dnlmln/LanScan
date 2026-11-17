@@ -71,6 +71,10 @@ test('LanScanner tracks RTT stats, grace periods, and resolves hostnames', async
     () => scanner.setConfig({ subnet: 'not-valid' }),
     /Invalid subnet format/
   );
+  await assert.rejects(
+    () => scanner.setConfig({ subnet: '8.8.8.0/24' }),
+    /private RFC1918 IPv4 range/
+  );
   scanner.stop();
 });
 

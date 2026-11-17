@@ -5,6 +5,7 @@ import { HostnameResolver } from './resolver.js';
 import {
   detectSubnet,
   ipToNumber,
+  isPrivateIpv4,
   normalizeSubnet,
   parseFpingOutput,
   parseIpv4Octets,
@@ -161,6 +162,11 @@ export class LanScanner extends EventEmitter {
         const normalized = normalizeSubnet(trimmed);
         if (!normalized) {
           throw new Error('Invalid subnet format. Expected e.g. 192.168.1.0/24');
+        }
+        if (!isPrivateIpv4(normalized.gateway)) {
+          throw new Error(
+            'Subnet must be a private RFC1918 IPv4 range (10.0.0.0/8, 172.16.0.0/12, or 192.168.0.0/16)'
+          );
         }
         this.configuredSubnet = normalized.subnet;
         if (normalized.subnet !== this.subnet) {
@@ -380,6 +386,11 @@ export class LanScanner extends EventEmitter {
     const trimmedIp = typeof ip === 'string' ? ip.trim() : '';
     if (!parseIpv4Octets(trimmedIp)) {
       throw new Error('Invalid IPv4 address');
+    }
+    if (!isPrivateIpv4(trimmedIp)) {
+      throw new Error(
+        'Port scanning is restricted to private LAN IPv4 addresses'
+      );
     }
 
     const existingTask = this.portScanningIps.get(trimmedIp);

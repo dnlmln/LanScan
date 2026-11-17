@@ -182,7 +182,7 @@ export async function detectSubnet(configuredSubnet = 'auto') {
     configuredSubnet.trim().toLowerCase() !== 'auto'
   ) {
     const normalized = normalizeSubnet(configuredSubnet);
-    if (normalized) {
+    if (normalized && isPrivateIpv4(normalized.gateway)) {
       return { ...normalized, source: 'configured' };
     }
   }

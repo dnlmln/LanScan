@@ -732,39 +732,6 @@ body {
   text-decoration: underline;
 }
 
-.host-ports-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-
-.host-port-pill {
-  padding: 1px 6px;
-  border-radius: 5px;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.host-port-pill.tcp {
-  color: var(--sol-blue);
-  background: rgba(38, 139, 210, 0.14);
-  border: 1px solid rgba(38, 139, 210, 0.3);
-}
-
-.host-port-pill.udp {
-  color: var(--sol-violet);
-  background: rgba(108, 113, 196, 0.14);
-  border: 1px solid rgba(108, 113, 196, 0.3);
-}
-
-.host-port-pill.more {
-  color: var(--text-muted);
-  background: var(--bg-input);
-  border: 1px solid var(--border-color);
-}
-
 .port-scanning-pill {
   display: inline-flex;
   align-items: center;
@@ -800,32 +767,6 @@ body {
 
 .host-table tbody tr.selected-row td:first-child {
   box-shadow: inset 3px 0 0 var(--sol-blue);
-}
-
-.row-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-row-scan {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(38, 139, 210, 0.45);
-  background-color: rgba(38, 139, 210, 0.14);
-  color: var(--sol-blue);
-  font-size: 0.76rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-row-scan:hover:not(:disabled) {
-  background-color: rgba(38, 139, 210, 0.24);
-}
-
-.btn-row-scan:disabled {
-  opacity: 0.55;
-  cursor: wait;
 }
 
 /* Table Section */
@@ -899,11 +840,6 @@ body {
 .host-table thead th.num-col,
 .host-table tbody td.num-col {
   text-align: right;
-}
-
-.host-table thead th.action-col,
-.host-table tbody td.action-col {
-  text-align: center;
 }
 
 .sort-btn {
@@ -1053,27 +989,6 @@ body {
 
 .sparkline {
   display: block;
-}
-
-.btn-row-resolve {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-input);
-  color: var(--text-primary);
-  font-size: 0.76rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.btn-row-resolve:hover:not(:disabled) {
-  border-color: var(--sol-cyan);
-  color: var(--sol-cyan);
-}
-
-.btn-row-resolve:disabled {
-  opacity: 0.55;
-  cursor: wait;
 }
 
 @media (max-width: 1024px) {

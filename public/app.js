@@ -496,6 +496,65 @@
     `;
   }
 
+  function buildHostRowCells(host) {
+    const statusClass = host.respondingNow
+      ? 'status-live'
+      : host.online
+      ? 'status-grace'
+      : 'status-offline';
+    const statusLabel = host.respondingNow
+      ? 'LIVE'
+      : host.online
+      ? 'GRACE'
+      : 'OFFLINE';
+
+    const rttClass =
+      host.rttMs === null
+        ? 'rtt-muted'
+        : host.rttMs < 10
+        ? 'rtt-fast'
+        : host.rttMs < 40
+        ? 'rtt-mid'
+        : 'rtt-slow';
+
+    const rttLabel =
+      host.rttMs !== null ? `${host.rttMs.toFixed(2)} ms` : '—';
+
+    const statsLabel = `${host.minRttMs?.toFixed(1) ?? '—'} / ${
+      host.avgRttMs?.toFixed(1) ?? '—'
+    } / ${host.maxRttMs?.toFixed(1) ?? '—'}`;
+
+    const hostnameHtml = host.hostname
+      ? `<div class="hostname-wrap">
+          <span class="hostname-text">${escapeHtml(host.hostname)}</span>
+          ${
+            host.hostnameSource
+              ? `<span class="proto-badge">${escapeHtml(
+                  host.hostnameSource
+                )}</span>`
+              : ''
+          }
+        </div>`
+      : `<span class="hostname-unresolved">${
+          host.resolving ? 'Resolving...' : 'Unresolved'
+        }</span>`;
+
+    const gwTag = host.isGateway ? '<span class="gw-tag">GW</span>' : '';
+
+    return `<td>
+        <span class="status-pill ${statusClass}">
+          <span class="dot"></span>${statusLabel}
+        </span>
+      </td>
+      <td class="ip-cell">${escapeHtml(host.ip)}${gwTag}</td>
+      <td>${hostnameHtml}</td>
+      <td class="num-col mono ${rttClass}">${rttLabel}</td>
+      <td class="num-col mono rtt-muted">${statsLabel}</td>
+      <td>${renderSparkline(host.history)}</td>
+      <td class="num-col mono">${host.responseRate}% <span class="rtt-muted">(${host.hits}/${host.totalChecks})</span></td>
+      <td class="num-col mono rtt-muted">${formatRelativeTime(host.lastSeen)}</td>`;
+  }
+
   function renderTable() {
     const data = state.server;
     if (!data) return;
@@ -531,69 +590,50 @@
       return;
     }
 
-    els.hostsBody.innerHTML = sorted
-      .map((host) => {
-        const statusClass = host.respondingNow
-          ? 'status-live'
-          : host.online
-          ? 'status-grace'
-          : 'status-offline';
-        const statusLabel = host.respondingNow
-          ? 'LIVE'
-          : host.online
-          ? 'GRACE'
-          : 'OFFLINE';
+    const existingRows = new Map();
+    for (const child of Array.from(els.hostsBody.children)) {
+      const ip = child.getAttribute('data-host-ip');
+      if (ip) {
+        existingRows.set(ip, child);
+      } else {
+        child.remove();
+      }
+    }
 
-        const rttClass =
-          host.rttMs === null
-            ? 'rtt-muted'
-            : host.rttMs < 10
-            ? 'rtt-fast'
-            : host.rttMs < 40
-            ? 'rtt-mid'
-            : 'rtt-slow';
+    const activeIps = new Set();
+    let cursor = els.hostsBody.firstElementChild;
 
-        const rttLabel =
-          host.rttMs !== null ? `${host.rttMs.toFixed(2)} ms` : '—';
+    for (const host of sorted) {
+      activeIps.add(host.ip);
+      let tr = existingRows.get(host.ip);
+      if (!tr) {
+        tr = document.createElement('tr');
+        tr.setAttribute('data-host-ip', host.ip);
+      }
 
-        const statsLabel = `${host.minRttMs?.toFixed(1) ?? '—'} / ${
-          host.avgRttMs?.toFixed(1) ?? '—'
-        } / ${host.maxRttMs?.toFixed(1) ?? '—'}`;
+      const selectedClass = state.selectedIp === host.ip ? 'selected-row' : '';
+      if (tr.className !== selectedClass) {
+        tr.className = selectedClass;
+      }
 
-        const hostnameHtml = host.hostname
-          ? `<div class="hostname-wrap">
-              <span class="hostname-text">${escapeHtml(host.hostname)}</span>
-              ${
-                host.hostnameSource
-                  ? `<span class="proto-badge">${escapeHtml(
-                      host.hostnameSource
-                    )}</span>`
-                  : ''
-              }
-            </div>`
-          : `<span class="hostname-unresolved">${
-              host.resolving ? 'Resolving...' : 'Unresolved'
-            }</span>`;
+      const cellsHtml = buildHostRowCells(host);
+      if (tr.dataset.lastHtml !== cellsHtml) {
+        tr.innerHTML = cellsHtml;
+        tr.dataset.lastHtml = cellsHtml;
+      }
 
-        const gwTag = host.isGateway ? '<span class="gw-tag">GW</span>' : '';
-        const selectedClass = state.selectedIp === host.ip ? 'selected-row' : '';
+      if (tr !== cursor) {
+        els.hostsBody.insertBefore(tr, cursor);
+      } else {
+        cursor = cursor.nextElementSibling;
+      }
+    }
 
-        return `<tr class="${selectedClass}" data-host-ip="${escapeHtml(host.ip)}">
-          <td>
-            <span class="status-pill ${statusClass}">
-              <span class="dot"></span>${statusLabel}
-            </span>
-          </td>
-          <td class="ip-cell">${escapeHtml(host.ip)}${gwTag}</td>
-          <td>${hostnameHtml}</td>
-          <td class="num-col mono ${rttClass}">${rttLabel}</td>
-          <td class="num-col mono rtt-muted">${statsLabel}</td>
-          <td>${renderSparkline(host.history)}</td>
-          <td class="num-col mono">${host.responseRate}% <span class="rtt-muted">(${host.hits}/${host.totalChecks})</span></td>
-          <td class="num-col mono rtt-muted">${formatRelativeTime(host.lastSeen)}</td>
-        </tr>`;
-      })
-      .join('');
+    for (const [ip, tr] of existingRows.entries()) {
+      if (!activeIps.has(ip)) {
+        tr.remove();
+      }
+    }
   }
 
   function updateConnectionIndicators() {

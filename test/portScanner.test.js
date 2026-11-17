@@ -137,6 +137,10 @@ test('LanScanner.scanPorts validates IPs and stores port scan results in state',
   await scanner.runScanCycle();
 
   await assert.rejects(() => scanner.scanPorts('invalid-ip'), /Invalid IPv4/);
+  await assert.rejects(
+    () => scanner.scanPorts('8.8.8.8'),
+    /restricted to private LAN IPv4/
+  );
 
   const scanRes = await scanner.scanPorts('192.168.1.1');
   assert.equal(scanRes.openPorts.length, 1);
