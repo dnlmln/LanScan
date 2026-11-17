@@ -21,6 +21,7 @@
 
   const els = {
     radarDot: document.getElementById('radarDot'),
+    versionBadge: document.getElementById('versionBadge'),
     subnetBadge: document.getElementById('subnetBadge'),
     connBadge: document.getElementById('connBadge'),
     themeDarkBtn: document.getElementById('themeDarkBtn'),
@@ -658,6 +659,11 @@
     state.server = data;
     if (data.lastError) {
       showAlert(data.lastError);
+    }
+
+    if (els.versionBadge && data.version) {
+      els.versionBadge.textContent = `v${data.version}`;
+      els.versionBadge.classList.remove('hidden');
     }
 
     els.subnetBadge.textContent = data.subnet || 'Detecting...';

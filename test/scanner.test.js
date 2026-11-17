@@ -30,6 +30,7 @@ test('LanScanner tracks RTT stats, grace periods, and resolves hostnames', async
   };
 
   const scanner = new LanScanner({
+    version: '1.0.1',
     subnet: '192.168.1.0/24',
     intervalMs: 1000,
     graceMs: 5000,
@@ -45,6 +46,7 @@ test('LanScanner tracks RTT stats, grace periods, and resolves hostnames', async
   await new Promise((r) => setTimeout(r, 20));
 
   let state = scanner.getState();
+  assert.equal(state.version, '1.0.1');
   assert.equal(state.subnet, '192.168.1.0/24');
   assert.equal(state.scanCount, 1);
   assert.equal(state.summary.respondingCount, 2);

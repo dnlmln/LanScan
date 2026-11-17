@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,10 +9,15 @@ import { LanScanner } from './scanner.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, '../public');
+const APP_VERSION =
+  JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+  ).version || '0.0.0';
 
 const PORT = Number(process.env.PORT || 3000);
 
 const scanner = new LanScanner({
+  version: APP_VERSION,
   subnet: process.env.SCAN_SUBNET || 'auto',
   intervalMs: Number(process.env.SCAN_INTERVAL_MS || 1000),
   pingTimeoutMs: Number(process.env.PING_TIMEOUT_MS || 350),
@@ -120,7 +126,7 @@ async function main() {
   await scanner.init();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(
-      `LanScan listening on http://0.0.0.0:${PORT} (subnet ${scanner.subnet}, interval ${scanner.intervalMs}ms)`
+      `LanScan v${APP_VERSION} listening on http://0.0.0.0:${PORT} (subnet ${scanner.subnet}, interval ${scanner.intervalMs}ms)`
     );
   });
   await scanner.start();

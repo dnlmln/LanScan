@@ -188,6 +188,16 @@ body {
   border-color: rgba(38, 139, 210, 0.35);
 }
 
+.badge.hidden {
+  display: none;
+}
+
+.badge-version {
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-color: var(--border-color);
+}
+
 .badge-conn {
   color: var(--sol-green);
   background: rgba(133, 153, 0, 0.14);
