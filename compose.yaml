@@ -1,0 +1,15 @@
+services:
+  lanscan:
+    build: .
+    container_name: lanscan
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.example
+    cap_add:
+      - NET_RAW
+    volumes:
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./test:/app/test
+    restart: unless-stopped

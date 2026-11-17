@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LanScan — Live LAN Ping & Hostname Monitor</title>
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('lanscan-theme');
+          if (saved === 'light' || saved === 'dark') {
+            document.documentElement.dataset.theme = saved;
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="radar-dot" id="radarDot" aria-hidden="true">
+            <span class="radar-ring"></span>
+            <span class="radar-core"></span>
+          </div>
+          <div>
+            <div class="brand-row">
+              <h1>LanScan</h1>
+              <span class="badge badge-subnet" id="subnetBadge">Detecting...</span>
+              <span class="badge badge-conn" id="connBadge">Connecting</span>
+            </div>
+            <p class="subtitle">
+              Real-time home network ICMP sweep &amp; multi-protocol hostname discovery
+            </p>
+          </div>
+        </div>
+
+        <div class="theme-switcher" role="group" aria-label="Solarized Theme">
+          <button
+            type="button"
+            class="theme-btn"
+            data-theme-choice="dark"
+            id="themeDarkBtn"
+            aria-pressed="true"
+          >
+            <span class="swatch swatch-dark" aria-hidden="true"></span>
+            Solarized Dark
+          </button>
+          <button
+            type="button"
+            class="theme-btn"
+            data-theme-choice="light"
+            id="themeLightBtn"
+            aria-pressed="false"
+          >
+            <span class="swatch swatch-light" aria-hidden="true"></span>
+            Solarized Light
+          </button>
+        </div>
+      </header>
+
+      <div class="alert-banner hidden" id="alertBanner" role="alert">
+        <span id="alertText"></span>
+        <button type="button" class="alert-close" id="alertCloseBtn" aria-label="Dismiss alert">
+          &times;
+        </button>
+      </div>
+
+      <section class="controls-panel" aria-label="Scanner Controls">
+        <div class="control-group interval-group">
+          <div class="control-label">
+            <span>Update Interval</span>
+            <strong id="intervalDisplay">1.0s (1000 ms)</strong>
+          </div>
+          <div class="interval-controls">
+            <div class="preset-pills" role="group" aria-label="Interval Presets">
+              <button type="button" class="pill-btn" data-interval="500">0.5s</button>
+              <button type="button" class="pill-btn active" data-interval="1000">1s</button>
+              <button type="button" class="pill-btn" data-interval="2000">2s</button>
+              <button type="button" class="pill-btn" data-interval="5000">5s</button>
+              <button type="button" class="pill-btn" data-interval="10000">10s</button>
+            </div>
+            <div class="slider-wrap">
+              <input
+                type="range"
+                id="intervalSlider"
+                min="250"
+                max="15000"
+                step="250"
+                value="1000"
+                aria-label="Scan interval in milliseconds"
+              />
+              <div class="ms-input-wrap">
+                <input
+                  type="number"
+                  id="intervalInput"
+                  min="250"
+                  max="60000"
+                  step="50"
+                  value="1000"
+                  aria-label="Custom scan interval in milliseconds"
+                />
+                <span class="unit">ms</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group subnet-group">
+          <div class="control-label">
+            <span>Target Subnet</span>
+            <span class="muted-meta" id="subnetSourceLabel">auto</span>
+          </div>
+          <form class="subnet-form" id="subnetForm">
+            <input
+              type="text"
+              id="subnetInput"
+              placeholder="192.168.1.0/24"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="Target IPv4 /24 subnet"
+            />
+            <button type="submit" class="btn btn-primary">Apply</button>
+            <button type="button" class="btn btn-secondary" id="autoSubnetBtn">
+              Auto
+            </button>
+          </form>
+        </div>
+
+        <div class="control-group actions-group">
+          <div class="control-label">
+            <span>Live Scanner</span>
+            <span class="muted-meta" id="scannerStateLabel">Running</span>
+          </div>
+          <div class="action-buttons">
+            <button type="button" class="btn btn-accent" id="pauseBtn">
+              Pause
+            </button>
+            <button type="button" class="btn btn-secondary" id="scanNowBtn">
+              Scan Now
+            </button>
+            <button type="button" class="btn btn-secondary" id="resolveAllBtn">
+              Resolve All
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="metrics-grid" aria-label="Network Summary">
+        <article class="metric-card">
+          <span class="metric-label">Responding IPs</span>
+          <div class="metric-value-row">
+            <strong class="metric-value accent-green" id="metricResponding">0</strong>
+            <span class="metric-sub" id="metricSeenSub">0 total seen</span>
+          </div>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Hostnames Resolved</span>
+          <div class="metric-value-row">
+            <strong class="metric-value accent-cyan" id="metricResolved">0</strong>
+            <span class="metric-sub" id="metricResolvedSub">mDNS / DNS / NetBIOS</span>
+          </div>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Avg Ping RTT</span>
+          <div class="metric-value-row">
+            <strong class="metric-value accent-blue" id="metricAvgRtt">—</strong>
+            <span class="metric-sub" id="metricGatewaySub">Gateway —</span>
+          </div>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Sweep Cadence</span>
+          <div class="metric-value-row">
+            <strong class="metric-value accent-violet" id="metricScanCount">#0</strong>
+            <span class="metric-sub" id="metricDurationSub">1.0s interval</span>
+          </div>
+        </article>
+      </section>
+
+      <section class="port-scanner-section" id="portScannerSection" aria-label="Port Scanner Inspector">
+        <div class="port-scanner-header">
+          <div class="port-scanner-title">
+            <h2>Port Scanner Inspector</h2>
+            <span class="badge badge-target" id="selectedTargetBadge">Select an IP</span>
+          </div>
+          <form class="port-scan-form" id="portScanForm">
+            <select id="portScanIpSelect" aria-label="Select discovered IP address">
+              <option value="">Choose discovered host...</option>
+            </select>
+            <input
+              type="text"
+              id="portScanIpInput"
+              placeholder="e.g. 192.168.1.1"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="Target IP address for port scan"
+            />
+            <button type="submit" class="btn btn-primary" id="runPortScanBtn">
+              Quick Scan TCP &amp; UDP
+            </button>
+          </form>
+          <div class="port-filter-group" role="group" aria-label="Port Protocol Filter">
+            <button type="button" class="filter-btn active" data-port-filter="all">All</button>
+            <button type="button" class="filter-btn" data-port-filter="tcp">TCP</button>
+            <button type="button" class="filter-btn" data-port-filter="udp">UDP</button>
+          </div>
+        </div>
+        <div class="port-scan-summary" id="portScanSummary">
+          Click any host row below—or select/enter an IP above—and click <strong>Quick Scan TCP &amp; UDP</strong> to probe open ports.
+        </div>
+        <div class="port-scan-results" id="portScanResults"></div>
+      </section>
+
+      <section class="table-section" aria-label="Discovered Hosts">
+        <div class="table-toolbar">
+          <div class="search-box">
+            <input
+              type="search"
+              id="searchInput"
+              placeholder="Filter by IP, hostname, or protocol (e.g. 192.168.1, .local, mDNS)..."
+              aria-label="Filter hosts"
+            />
+          </div>
+          <div class="view-filter" role="group" aria-label="Host Visibility Filter">
+            <button
+              type="button"
+              class="filter-btn active"
+              data-filter="online"
+              id="filterOnlineBtn"
+            >
+              Responding (<span id="filterOnlineCount">0</span>)
+            </button>
+            <button
+              type="button"
+              class="filter-btn"
+              data-filter="all"
+              id="filterAllBtn"
+            >
+              All Seen (<span id="filterAllCount">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="host-table">
+            <thead>
+              <tr>
+                <th>
+                  <button type="button" class="sort-btn" data-sort="status">
+                    Status <span class="sort-indicator"></span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="sort-btn active" data-sort="ip">
+                    IP Address <span class="sort-indicator">▲</span>
+                  </button>
+                </th>
+                <th>
+                  <button type="button" class="sort-btn" data-sort="hostname">
+                    Hostname <span class="sort-indicator"></span>
+                  </button>
+                </th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-sort="rtt">
+                    Ping RTT <span class="sort-indicator"></span>
+                  </button>
+                </th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-sort="avg">
+                    Min / Avg / Max <span class="sort-indicator"></span>
+                  </button>
+                </th>
+                <th>20-Tick History</th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-sort="rate">
+                    Response <span class="sort-indicator"></span>
+                  </button>
+                </th>
+                <th class="num-col">
+                  <button type="button" class="sort-btn" data-sort="lastSeen">
+                    Last Seen <span class="sort-indicator"></span>
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody id="hostsBody">
+              <tr class="empty-row">
+                <td colspan="8">
+                  Waiting for first ping sweep...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

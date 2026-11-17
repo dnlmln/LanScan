@@ -1,0 +1,15 @@
+{
+  "name": "lanscan",
+  "version": "1.0.0",
+  "description": "Real-time containerized LAN ping and hostname scanner with Solarized Dark & Light UI",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}
