@@ -351,7 +351,7 @@ export class LanScanner extends EventEmitter {
 
     this.resolvingIps.add(ip);
     return this.resolver
-      .resolve(ip, this.gateway, true)
+      .resolve(ip, this.gateway)
       .then((res) => {
         const currentHost = this.hosts.get(ip);
         if (currentHost && res?.hostname) {
@@ -368,7 +368,16 @@ export class LanScanner extends EventEmitter {
   }
 
   async resolveHost(ip, force = true) {
-    const res = await this.ensureHostnameResolution(ip, force);
+    const trimmedIp = typeof ip === 'string' ? ip.trim() : '';
+    if (!parseIpv4Octets(trimmedIp)) {
+      throw new Error('Invalid IPv4 address');
+    }
+    if (!isPrivateIpv4(trimmedIp)) {
+      throw new Error(
+        'Hostname resolution is restricted to private LAN IPv4 addresses'
+      );
+    }
+    const res = await this.ensureHostnameResolution(trimmedIp, force);
     this.emitUpdate();
     return res;
   }

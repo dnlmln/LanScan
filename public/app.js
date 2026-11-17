@@ -17,6 +17,7 @@
   let ws = null;
   let reconnectTimer = null;
   let intervalDebounceTimer = null;
+  const rowHtmlCache = new WeakMap();
 
   const els = {
     radarDot: document.getElementById('radarDot'),
@@ -617,9 +618,9 @@
       }
 
       const cellsHtml = buildHostRowCells(host);
-      if (tr.dataset.lastHtml !== cellsHtml) {
+      if (rowHtmlCache.get(tr) !== cellsHtml) {
         tr.innerHTML = cellsHtml;
-        tr.dataset.lastHtml = cellsHtml;
+        rowHtmlCache.set(tr, cellsHtml);
       }
 
       if (tr !== cursor) {

@@ -41,13 +41,17 @@ app.post('/api/scan', async (_req, res) => {
 });
 
 app.post('/api/resolve', async (req, res) => {
-  const ip = req.body?.ip;
-  if (typeof ip === 'string' && ip.trim()) {
-    await scanner.resolveHost(ip.trim(), true);
-  } else {
-    await scanner.resolveAllHosts();
+  try {
+    const ip = req.body?.ip;
+    if (typeof ip === 'string' && ip.trim()) {
+      await scanner.resolveHost(ip.trim(), true);
+    } else {
+      await scanner.resolveAllHosts();
+    }
+    res.json({ ok: true, state: scanner.getState() });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
   }
-  res.json({ ok: true, state: scanner.getState() });
 });
 
 app.post('/api/ports', async (req, res) => {

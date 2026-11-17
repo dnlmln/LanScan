@@ -5,8 +5,6 @@ import { parseIpv4Octets } from './subnet.js';
 const MDNS_PORT = 5353;
 const MDNS_MULTICAST_ADDR = '224.0.0.251';
 const NBNS_PORT = 137;
-const POSITIVE_TTL_MS = 30 * 60 * 1000;
-const NEGATIVE_TTL_MS = 30 * 60 * 1000;
 
 /**
  * Format an IPv4 address into its reverse DNS PTR name (<d>.<c>.<b>.<a>.in-addr.arpa).
@@ -347,90 +345,57 @@ export async function queryReverseDns(ip, gatewayIp, timeoutMs = 750) {
 }
 
 /**
- * Cached multi-protocol hostname resolver prioritizing mDNS -> DNS -> NetBIOS -> Gateway.
+ * Multi-protocol hostname resolver prioritizing mDNS -> DNS -> NetBIOS -> Gateway
+ * with in-flight request deduplication (caching and retry scheduling are managed by LanScanner).
  */
 export class HostnameResolver {
   constructor(options = {}) {
-    this.positiveTtlMs = options.positiveTtlMs ?? POSITIVE_TTL_MS;
-    this.negativeTtlMs = options.negativeTtlMs ?? NEGATIVE_TTL_MS;
     this.queryTimeoutMs = options.queryTimeoutMs ?? 750;
-    this.cache = new Map();
+    this.inFlight = new Map();
   }
 
   clear() {
-    this.cache.clear();
+    this.inFlight.clear();
   }
 
-  getCached(ip) {
-    const entry = this.cache.get(ip);
-    if (!entry) return null;
-    return {
-      hostname: entry.hostname ?? null,
-      source: entry.source ?? null,
-    };
-  }
-
-  async resolve(ip, gatewayIp = null, force = false) {
-    const now = Date.now();
-    const existing = this.cache.get(ip);
-
-    if (existing?.inFlight) {
-      return existing.inFlight;
-    }
-
-    if (!force && existing && existing.resolvedAt) {
-      const ttl = existing.hostname ? this.positiveTtlMs : this.negativeTtlMs;
-      if (now - existing.resolvedAt < ttl) {
-        return {
-          hostname: existing.hostname,
-          source: existing.source,
-        };
-      }
+  async resolve(ip, gatewayIp = null) {
+    const existingTask = this.inFlight.get(ip);
+    if (existingTask) {
+      return existingTask;
     }
 
     const task = (async () => {
-      const [mdnsRes, dnsRes, netbiosRes] = await Promise.allSettled([
-        queryMdns(ip, this.queryTimeoutMs),
-        queryReverseDns(ip, gatewayIp, this.queryTimeoutMs),
-        queryNetbios(ip, this.queryTimeoutMs),
-      ]);
+      try {
+        const [mdnsRes, dnsRes, netbiosRes] = await Promise.allSettled([
+          queryMdns(ip, this.queryTimeoutMs),
+          queryReverseDns(ip, gatewayIp, this.queryTimeoutMs),
+          queryNetbios(ip, this.queryTimeoutMs),
+        ]);
 
-      let resolved = null;
-      if (mdnsRes.status === 'fulfilled' && mdnsRes.value?.hostname) {
-        resolved = mdnsRes.value;
-      } else if (dnsRes.status === 'fulfilled' && dnsRes.value?.hostname) {
-        resolved = dnsRes.value;
-      } else if (
-        netbiosRes.status === 'fulfilled' &&
-        netbiosRes.value?.hostname
-      ) {
-        resolved = netbiosRes.value;
-      } else if (gatewayIp && ip === gatewayIp) {
-        resolved = { hostname: 'gateway.local', source: 'Gateway' };
+        let resolved = null;
+        if (mdnsRes.status === 'fulfilled' && mdnsRes.value?.hostname) {
+          resolved = mdnsRes.value;
+        } else if (dnsRes.status === 'fulfilled' && dnsRes.value?.hostname) {
+          resolved = dnsRes.value;
+        } else if (
+          netbiosRes.status === 'fulfilled' &&
+          netbiosRes.value?.hostname
+        ) {
+          resolved = netbiosRes.value;
+        } else if (gatewayIp && ip === gatewayIp) {
+          resolved = { hostname: 'gateway.local', source: 'Gateway' };
+        }
+
+        return {
+          hostname: resolved?.hostname ?? null,
+          source: resolved?.source ?? null,
+        };
+      } finally {
+        this.inFlight.delete(ip);
       }
-
-      const finalResult = {
-        hostname: resolved?.hostname ?? null,
-        source: resolved?.source ?? null,
-      };
-
-      this.cache.set(ip, {
-        hostname: finalResult.hostname,
-        source: finalResult.source,
-        resolvedAt: Date.now(),
-        inFlight: null,
-      });
-
-      return finalResult;
     })();
 
-    this.cache.set(ip, {
-      hostname: existing?.hostname ?? null,
-      source: existing?.source ?? null,
-      resolvedAt: existing?.resolvedAt ?? 0,
-      inFlight: task,
-    });
-
+    this.inFlight.set(ip, task);
     return task;
   }
 }
