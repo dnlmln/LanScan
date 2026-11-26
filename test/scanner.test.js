@@ -152,3 +152,72 @@ test('LanScanner resolves on discovery, retries once after 30s, then caches for 
 
   scanner.stop();
 });
+
+test('LanScanner clears stale hostname after DHCP reassignment confirmation or forced resolve', async () => {
+  let currentName = 'old-mac.local';
+  let calls = 0;
+
+  const dhcpResolver = {
+    clear() {},
+    async resolve() {
+      calls += 1;
+      return currentName
+        ? { hostname: currentName, source: 'mDNS' }
+        : { hostname: null, source: null };
+    },
+  };
+
+  const scanner = new LanScanner({
+    subnet: '192.168.1.0/24',
+    intervalMs: 1000,
+    hostnameCacheTtlMs: 30 * 60 * 1000,
+    unresolvedRetryDelayMs: 30 * 1000,
+    resolver: dhcpResolver,
+    runFping: async () => '192.168.1.166 (3.0 ms)\n',
+  });
+
+  await scanner.init();
+  scanner.paused = true;
+
+  // Initial discovery resolves old-mac.local
+  await scanner.runScanCycle();
+  await new Promise((r) => setTimeout(r, 20));
+  const host = scanner.hosts.get('192.168.1.166');
+  assert.equal(host.hostname, 'old-mac.local');
+  assert.equal(calls, 1);
+
+  // Simulate DHCP reassignment (resolver now returns null) and 30+ min elapsed
+  currentName = null;
+  host.lastResolveAttemptAt = Date.now() - 31 * 60 * 1000;
+
+  // First re-check records miss 1 and keeps old-mac.local pending 30s confirmation
+  await scanner.runScanCycle();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(calls, 2);
+  assert.equal(host.hostname, 'old-mac.local');
+  assert.equal(host.consecutiveResolveMisses, 1);
+
+  // Simulate 31s elapsed -> confirmation retry runs and clears stale hostname
+  host.lastResolveAttemptAt = Date.now() - 31_000;
+  await scanner.runScanCycle();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(calls, 3);
+  assert.equal(host.hostname, null);
+  assert.equal(host.hostnameSource, null);
+
+  // Subsequent sweeps stay cached negative (no immediate re-probes)
+  await scanner.runScanCycle();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(calls, 3);
+
+  // Re-resolve a name, then verify forced resolveAllHosts clears stale name immediately
+  currentName = 'new-mac.local';
+  await scanner.resolveAllHosts();
+  assert.equal(host.hostname, 'new-mac.local');
+  currentName = null;
+  await scanner.resolveAllHosts();
+  assert.equal(host.hostname, null);
+  assert.equal(host.hostnameSource, null);
+
+  scanner.stop();
+});

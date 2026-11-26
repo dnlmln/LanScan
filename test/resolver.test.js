@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
+import dgram from 'node:dgram';
+import http from 'node:http';
 import test from 'node:test';
 import {
   buildNetbiosQuery,
   buildPtrQuery,
+  buildSnmpSysNameQuery,
+  cleanDeviceName,
+  extractCertHostname,
+  extractHtmlTitle,
   formatReversePtrName,
   parseDnsPtrResponse,
   parseNetbiosResponse,
+  parseSnmpStringResponse,
+  parseSsdpLocation,
+  parseUpnpXmlDeviceName,
+  queryGoogleCast,
+  queryHttpTitle,
+  querySnmpSysName,
 } from '../src/resolver.js';
 
 function encodeLabels(domain) {
@@ -114,4 +126,139 @@ test('buildNetbiosQuery and parseNetbiosResponse handle NBSTAT packets', () => {
 
   const resp = Buffer.concat([headerAndPrefix, entry1, entry2]);
   assert.equal(parseNetbiosResponse(resp), 'NAS-BOX');
+});
+
+test('parseSsdpLocation and parseUpnpXmlDeviceName extract device name and decode entities', () => {
+  const ssdp =
+    'HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=1800\r\nLOCATION: http://192.168.1.50:1400/xml/device_description.xml\r\n\r\n';
+  assert.equal(
+    parseSsdpLocation(ssdp),
+    'http://192.168.1.50:1400/xml/device_description.xml'
+  );
+  assert.equal(parseSsdpLocation('HTTP/1.1 200 OK\r\n\r\n'), null);
+
+  const xmlFriendly =
+    '<root><device><friendlyName>Living Room &amp; TV</friendlyName><modelName>Sonos Arc</modelName></device></root>';
+  assert.equal(
+    parseUpnpXmlDeviceName(xmlFriendly, '192.168.1.50'),
+    'Living Room & TV'
+  );
+
+  const xmlModelFallback =
+    '<root><device><friendlyName>192.168.1.50</friendlyName><modelName>Canon GX2020 series</modelName></device></root>';
+  assert.equal(
+    parseUpnpXmlDeviceName(xmlModelFallback, '192.168.1.50'),
+    'Canon GX2020 series'
+  );
+});
+
+test('buildSnmpSysNameQuery and parseSnmpStringResponse handle SNMP sysName packets', () => {
+  const query = buildSnmpSysNameQuery();
+  assert.equal(query.length, 43);
+
+  const oid = Buffer.from([0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x05, 0x00]);
+  const sysName = Buffer.from('core-switch-01', 'ascii');
+  const resp = Buffer.concat([
+    Buffer.from([0x30, 0x20, 0x02, 0x01, 0x01, 0x04, 0x06]),
+    Buffer.from('public', 'ascii'),
+    Buffer.from([0xa2, 0x16, 0x06, 0x08]),
+    oid,
+    Buffer.from([0x04, sysName.length]),
+    sysName,
+  ]);
+  assert.equal(parseSnmpStringResponse(resp, '192.168.1.2'), 'core-switch-01');
+});
+
+test('extractCertHostname and extractHtmlTitle filter boilerplate and invalid names', () => {
+  assert.equal(
+    extractCertHostname(
+      { subject: { CN: 'proxmox.local' }, subjectaltname: 'DNS:pve.local' },
+      '192.168.1.10'
+    ),
+    'proxmox.local'
+  );
+  assert.equal(
+    extractCertHostname(
+      { subject: { CN: '*.example.com' }, subjectaltname: 'DNS:192.168.1.10, DNS:nas-box.lan' },
+      '192.168.1.10'
+    ),
+    'nas-box.lan'
+  );
+  assert.equal(
+    extractCertHostname({ subject: { CN: 'localhost' } }, '192.168.1.10'),
+    null
+  );
+
+  assert.equal(
+    extractHtmlTitle('<html><head><title>Synology&nbsp;NAS &amp; DSM</title></head></html>', '192.168.1.10'),
+    'Synology NAS & DSM'
+  );
+  assert.equal(extractHtmlTitle('<title>404 Not Found</title>', '192.168.1.10'), null);
+  assert.equal(extractHtmlTitle('<title>Login</title>', '192.168.1.10'), null);
+  assert.equal(cleanDeviceName('192.168.1.10', '192.168.1.10'), null);
+});
+
+test('queryGoogleCast, queryHttpTitle, and querySnmpSysName resolve against local servers', async () => {
+  const castServer = http.createServer((req, res) => {
+    if (req.url === '/setup/eureka_info') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ name: 'Kitchen Speaker' }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+
+  const httpServer = http.createServer((_req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<html><head><title>Archer AX55 Router</title></head></html>');
+  });
+
+  const snmpSocket = dgram.createSocket('udp4');
+  snmpSocket.on('message', (_msg, rinfo) => {
+    const oid = Buffer.from([0x2b, 0x06, 0x01, 0x02, 0x01, 0x01, 0x05, 0x00]);
+    const val = Buffer.from('office-printer', 'ascii');
+    const reply = Buffer.concat([
+      Buffer.from([0x30, 0x1e, 0xa2, 0x1a, 0x06, 0x08]),
+      oid,
+      Buffer.from([0x04, val.length]),
+      val,
+    ]);
+    snmpSocket.send(reply, rinfo.port, rinfo.address);
+  });
+
+  await Promise.all([
+    new Promise((r) => castServer.listen(0, '127.0.0.1', r)),
+    new Promise((r) => httpServer.listen(0, '127.0.0.1', r)),
+    new Promise((r) => snmpSocket.bind(0, '127.0.0.1', r)),
+  ]);
+
+  try {
+    const castRes = await queryGoogleCast(
+      '127.0.0.1',
+      500,
+      castServer.address().port
+    );
+    assert.deepEqual(castRes, { hostname: 'Kitchen Speaker', source: 'Cast' });
+
+    const httpRes = await queryHttpTitle(
+      '127.0.0.1',
+      500,
+      [httpServer.address().port]
+    );
+    assert.deepEqual(httpRes, { hostname: 'Archer AX55 Router', source: 'HTTP' });
+
+    const snmpRes = await querySnmpSysName(
+      '127.0.0.1',
+      500,
+      snmpSocket.address().port
+    );
+    assert.deepEqual(snmpRes, { hostname: 'office-printer', source: 'SNMP' });
+  } finally {
+    await Promise.all([
+      new Promise((r) => castServer.close(r)),
+      new Promise((r) => httpServer.close(r)),
+      new Promise((r) => snmpSocket.close(r)),
+    ]);
+  }
 });
