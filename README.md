@@ -8,9 +8,14 @@
 
 - **Live ICMP Sweeps:** Sweeps your `/24` LAN subnet every second by default using `fping` and streams updates over WebSockets.
 - **Configurable Cadence:** Switch between presets (`0.5s`, `1s`, `2s`, `5s`, `10s`) or set any custom interval (`250 ms` – `60,000 ms`) from the UI.
-- **Multi-Protocol Hostname Resolution:** Resolves hostnames via mDNS (`UDP 5353`), Reverse DNS (`UDP 53`), NetBIOS Name Service (`UDP 137`), and Gateway detection.
+- **Multi-Protocol Hostname Resolution (v1.1.0):** Uses a two-tier lookup so far fewer devices stay `Unresolved`:
+  - **Tier 1:** mDNS (`UDP 5353`), Reverse DNS (`UDP 53`), NetBIOS Name Service (`UDP 137`), and LLMNR (`UDP 5355`).
+  - **Tier 2 (only if Tier 1 finds nothing):** Google Cast (`HTTP :8008/setup/eureka_info`), UPnP/SSDP (`UDP 1900` → device XML `friendlyName`/`modelName`), SNMP `sysName` (`UDP 161`), TLS certificate CN/SAN (`TCP 443`/`8443`), and HTTP page `<title>` (`TCP 80`/`8080`), followed by `gateway.local` for the router.
+  - The protocol that produced each name is shown as a badge next to the hostname.
+- **Smart Hostname Caching (v1.1.0):** Each IP is resolved once on discovery, retried once after 30 seconds if unresolved, then cached for 30 minutes (instead of re-probing on every ping). **Resolve All** forces an immediate refresh.
+- **Stale Hostname Clearing (v1.1.0):** If a named IP stops resolving (for example, DHCP reassigned it to another device), the old name is cleared after a 30-second confirmation re-check, or immediately via **Resolve All**.
 - **Quick TCP & UDP Port Scanner:** Click any host row (or enter an IP) to probe common LAN TCP and UDP ports with service info, RTT, and banners.
-- **Per-Host Telemetry:** Shows live status (`LIVE` / `GRACE` / `OFFLINE`), current/min/avg/max RTT, a 20-tick latency sparkline, response rate, and search/sorting.
+- **Per-Host Telemetry:** Shows live status (`LIVE` = replied to the latest sweep, `GRACE` = missed the latest sweep but seen within the grace window, `OFFLINE` = silent longer than the grace window), current/min/avg/max RTT, a 20-tick latency sparkline, response rate, and search/sorting.
 - **Solarized Dark & Light UI:** Theme toggle persisted in browser `localStorage`.
 
 ---
@@ -67,7 +72,7 @@ Default environment variables live in `.env.example`:
 
 To customize defaults permanently:
 - Edit `.env.example`, **or** copy `.env.example` to `.env` and update `env_file` in `compose.yaml` to `- .env`.
-- If port `3000` is already in use on your machine, change `"3000:3000"` in `compose.yaml` (for example, `"8080:3000"`) and open `http://localhost:8080`.
+- If port `3000` is already in use on your machine, set `HOST_PORT` (for example, `HOST_PORT=8080 docker compose up -d --build`) and open `http://localhost:8080`. You can also set `CONTAINER_NAME` and use `-p <project>` to run a second instance side by side (for example, `CONTAINER_NAME=lanscan-test HOST_PORT=3001 docker compose -p lanscan-test up -d --build`).
 
 ### Linux Tip (Optional): Better mDNS Discovery
 
