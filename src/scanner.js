@@ -59,6 +59,7 @@ export function defaultRunFping(subnet, pingTimeoutMs) {
 export class LanScanner extends EventEmitter {
   constructor(options = {}) {
     super();
+    this.version = options.version || null;
     this.configuredSubnet = options.subnet || 'auto';
     this.subnet = null;
     this.gateway = null;
@@ -473,6 +474,7 @@ export class LanScanner extends EventEmitter {
     const resolvedCount = hosts.filter((h) => Boolean(h.hostname)).length;
 
     return {
+      version: this.version,
       subnet: this.subnet,
       configuredSubnet: this.configuredSubnet,
       subnetSource: this.subnetSource,
