@@ -259,6 +259,7 @@ export class LanScanner extends EventEmitter {
           hostnameSource: null,
           resolveAttempts: 0,
           lastResolveAttemptAt: 0,
+          consecutiveResolveMisses: 0,
           rttMs,
           lastRttMs: rttMs,
           minRttMs: rttMs,
@@ -316,6 +317,9 @@ export class LanScanner extends EventEmitter {
 
     const elapsed = now - host.lastResolveAttemptAt;
     if (host.hostname) {
+      if (host.consecutiveResolveMisses === 1) {
+        return elapsed >= this.unresolvedRetryDelayMs;
+      }
       return elapsed >= this.hostnameCacheTtlMs;
     }
     if (host.resolveAttempts === 1) {
@@ -354,9 +358,21 @@ export class LanScanner extends EventEmitter {
       .resolve(ip, this.gateway)
       .then((res) => {
         const currentHost = this.hosts.get(ip);
-        if (currentHost && res?.hostname) {
-          currentHost.hostname = res.hostname;
-          currentHost.hostnameSource = res.source;
+        if (currentHost) {
+          if (res?.hostname) {
+            currentHost.hostname = res.hostname;
+            currentHost.hostnameSource = res.source;
+            currentHost.consecutiveResolveMisses = 0;
+          } else if (currentHost.hostname) {
+            if (force || currentHost.consecutiveResolveMisses >= 1) {
+              currentHost.hostname = null;
+              currentHost.hostnameSource = null;
+              currentHost.consecutiveResolveMisses = 0;
+              currentHost.resolveAttempts = 2;
+            } else {
+              currentHost.consecutiveResolveMisses = 1;
+            }
+          }
         }
         return res;
       })
