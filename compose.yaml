@@ -1,9 +1,9 @@
 services:
   lanscan:
     build: .
-    container_name: lanscan
+    container_name: ${CONTAINER_NAME:-lanscan}
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-3000}:3000"
     env_file:
       - .env.example
     cap_add:
